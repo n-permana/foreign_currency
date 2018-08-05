@@ -1,0 +1,19 @@
+version: '2'
+services:
+  web:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    # ports from container exposed to the docker machine and the guest machine
+    ports:
+      - "7001:7001"
+    # Link to containers in another service
+    links:
+      - db
+  db:
+    image: percona:latest
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: dev
+      MYSQL_DATABASE: foreign_currency
