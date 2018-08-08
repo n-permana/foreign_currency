@@ -15,10 +15,10 @@ func Init() *dbr.Session {
 	tables := initialTable()
 	for _, table := range tables {
 		fmt.Println(table)
-		cek, err := session.Exec(table)
-		fmt.Println(cek)
+		_, err := session.Exec(table)
 		fmt.Println(err)
 	}
+	fmt.Println("DONE MIGRATION")
 	return session
 }
 
@@ -27,10 +27,9 @@ func getSession() *dbr.Session {
 	db, err := dbr.Open("mysql",
 		config.USER+":"+config.PASSWORD+"@tcp("+config.HOST+":"+config.PORT+")/"+config.DB,
 		nil)
-	fmt.Println(db)
-	fmt.Println(err)
 	if err != nil {
 		logrus.Error(err)
+		panic(err)
 	} else {
 		session := db.NewSession(nil)
 		return session

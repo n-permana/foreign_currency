@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"foreign_currency/helper"
 	"foreign_currency/model"
 	"foreign_currency/repo"
@@ -55,7 +54,6 @@ func GetExchanges() echo.HandlerFunc {
 	return func(c echo.Context) (err error) {
 		// Get all exchange list
 		tx := c.Get("Tx").(*dbr.Tx)
-		fmt.Println("ok")
 		exchanges, err := repo.GetExchanges(tx)
 		return c.JSON(200, exchanges)
 	}

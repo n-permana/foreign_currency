@@ -31,23 +31,9 @@ func GetExchanges(tx *dbr.Tx) ([]model.Exchange, error) {
 
 func GetDetailExchange(id string, tx *dbr.Tx) (interface{}, error) {
 	type queryResult struct {
-		From string  `json:"from"`
-		To   string  `json:"to"`
 		Date string  `json:"date"`
 		Rate float64 `json:"rate"`
 	}
-	var queryResults []queryResult
-	query := fmt.Sprintf(`
-  select 
-  exchange.from,
-  exchange.to,
-  exchange_rate.date,
-  exchange_rate.rate
-  from exchange_rate
-  left join exchange on exchange_rate.exchange_id = exchange.id
-  where exchange_rate.exchange_id = %s order by exchange_rate.date desc limit 7 
-  `, id)
-	_, err := tx.SelectBySql(query).Load(&queryResults)
 	type result struct {
 		From     string  `json:"from"`
 		To       string  `json:"to"`
@@ -55,6 +41,21 @@ func GetDetailExchange(id string, tx *dbr.Tx) (interface{}, error) {
 		Variance float64 `json:"variance"`
 		Rates    []queryResult
 	}
+	exchange := new(model.Exchange)
+	_, err := tx.Select("*").
+		From("exchange").
+		Where("id = ?", id).
+		Load(&exchange)
+
+	var queryResults []queryResult
+	query := fmt.Sprintf(`
+    SELECT 
+    exchange_rate.date,
+    exchange_rate.rate
+    FROM exchange_rate
+    WHERE exchange_rate.exchange_id = %s order by exchange_rate.date desc limit 7 
+    `, id)
+	_, err = tx.SelectBySql(query).Load(&queryResults)
 	var finalResult result
 	totalRate := float64(0)
 	maxRate := float64(0)
@@ -67,11 +68,9 @@ func GetDetailExchange(id string, tx *dbr.Tx) (interface{}, error) {
 		if float64(data.Rate) < minRate || i == 0 {
 			minRate = float64(data.Rate)
 		}
-		if i == 0 {
-			finalResult.From = data.From
-			finalResult.To = data.To
-		}
 	}
+	finalResult.From = exchange.From
+	finalResult.To = exchange.To
 	finalResult.Average = float64(totalRate / 7)
 	finalResult.Variance = float64(maxRate - minRate)
 	finalResult.Rates = queryResults
@@ -86,16 +85,14 @@ func SaveExchangeRate(exchangeRate *model.ExhangeRate, tx *dbr.Tx) (map[string]s
 	if err != nil {
 		return response("something wrong", 0, err)
 	}
-	res, err := tx.InsertInto("exchange_rate").
+	_, err = tx.InsertInto("exchange_rate").
 		Columns("date", "exchange_id", "rate").
 		Values(exchangeRate.Date, existingExchange["exchangeId"], exchangeRate.Rate).
 		Exec()
-	fmt.Println(res)
-	fmt.Println(err)
 	if err != nil {
 		return response("something wrong", 0, err)
 	}
-	return response("the exhange has successfully saved", 1, err)
+	return response("the exhange rate has successfully saved", 1, err)
 }
 
 func GetExchangeRate(date string, tx *dbr.Tx) (interface{}, error) {
@@ -108,15 +105,15 @@ func GetExchangeRate(date string, tx *dbr.Tx) (interface{}, error) {
 	}
 	var queryResults []queryResult
 	query := fmt.Sprintf(`
-  select
+  SELECT
   exchange.id,
 	exchange.from,
 	exchange.to,
 	exchange_rate.rate,
-	(select avg(rate) from exchange_rate as ier where ier.date <= '%s' and ier.date >= DATE_ADD('%s', INTERVAL -7 DAY) and ier.exchange_id = exchange.id) as average
-  from exchange
+	(SELECT avg(rate) FROM exchange_rate as ier where ier.date <= '%s' and ier.date >= DATE_ADD('%s', INTERVAL -7 DAY) and ier.exchange_id = exchange.id) as average
+  FROM exchange
   left join exchange_rate on exchange.id = exchange_rate.exchange_id and exchange_rate.date = '%s'
-  group by exchange.id order by exchange_rate.rate desc
+  group by exchange.id,exchange.from,exchange.to,exchange_rate.rate order by exchange_rate.rate desc
   `, date, date, date)
 	_, err := tx.SelectBySql(query).Load(&queryResults)
 	for i, data := range queryResults {
@@ -146,6 +143,8 @@ func DeleteExchange(id string, tx *dbr.Tx) (map[string]string, error) {
 	}
 	return response("the exhange has successfully deleted", 1, err)
 }
+
+// private function
 
 func findOrCreateExchange(exchange *model.Exchange, tx *dbr.Tx) (map[string]interface{}, error) {
 	// check if the exchange is already exist and return it's ID
